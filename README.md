@@ -6,11 +6,7 @@
 
 <p align="center">
   <em>One eye on the field of view, one count per particle.</em><br/>
-  <strong>Cyclops</strong> sizes and counts viral-like particles, bacteria, archaea, and protists
-  in epifluorescence microscopy — a complete <strong>Rust</strong> rewrite of
-  <a href="https://github.com/raw-lab/EpiVirQuant">EpiVirQuant</a> with a desktop GUI,
-  Polars-backed object tables, and an optional ML classifier.
-</p>
+  </p>
 
 <p align="center">
   <a href="#install"><img alt="install" src="https://img.shields.io/badge/install-cargo-blue"/></a>
@@ -22,7 +18,11 @@
 
 ## Why Cyclops?
 
-Cyclops is a fully reimplemented, statically-compiled successor to
+<strong>Cyclops</strong> sizes and counts viral-like particles, bacteria, archaea, and protists
+  in epifluorescence microscopy — a complete <strong>Rust</strong> rewrite of
+  <a href="https://github.com/raw-lab/EpiVirQuant">EpiVirQuant</a> with a desktop GUI,
+  Polars-backed object tables, and an optional ML classifier.
+  Cyclops is a fully reimplemented, statically-compiled successor to
 [EpiVirQuant](https://github.com/raw-lab/EpiVirQuant).
 The original Python pipeline pairs scale-bar beads, performs blind-deconvolution maximum-
 likelihood estimation of a **tunable point-spread function** (γ-sinc, Gaussian,
