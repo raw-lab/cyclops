@@ -23,8 +23,8 @@
 ## Why Cyclops?
 
 Cyclops is a fully reimplemented, statically-compiled successor to
-**EpiVirQuant v0.1.1** (Figueroa III, Hollenack & White III, 2026). The original
-Python pipeline pairs scale-bar beads, performs blind-deconvolution maximum-
+[EpiVirQuant](https://github.com/raw-lab/EpiVirQuant).
+The original Python pipeline pairs scale-bar beads, performs blind-deconvolution maximum-
 likelihood estimation of a **tunable point-spread function** (γ-sinc, Gaussian,
 or hybrid), calibrates against DAPI microspheres, then quantifies FITC-stained
 samples. Cyclops preserves that scientific core *bit-for-bit* and adds:
@@ -136,9 +136,7 @@ bundled bitmap font.
 
 ### Bioconda
 
-A Bioconda recipe will follow the first tagged release alongside the existing
-[raw-lab](https://anaconda.org/bioconda/repo) channel tooling (MetaCerberus,
-MerCat2, NFixDB, DeGenPrime, Pathview-web).
+A Bioconda recipe will follow soon
 
 ## Quick start
 
@@ -303,33 +301,33 @@ cargo build --release
 cargo build --release -p cyclops-cli --features onnx
 ```
 
-## Citation
-
-If you use Cyclops in published work, please cite both the original
-EpiVirQuant article and this software:
-
-> **EpiVirQuant** — Figueroa III JL, Hollenack SM, White III RAW.
-> *Direct counting and sizing of viral-like particles by tunable
-> blind-deconvolution of epifluorescence microscopy.*
-> **BMC Methods 3:10**, 2026. <https://doi.org/10.1186/s44330-026-00060-z>
-
-> **Cyclops** — White III RAW, Figueroa III JL, Hollenack SM. *Cyclops:
-> a Rust desktop application for sizing and counting viral-like
-> particles, bacteria, archaea, and protists in epifluorescence
-> microscopy.* (in preparation, 2026).
-
-## License
-
-Cyclops is released under **Creative Commons Attribution-NonCommercial
-4.0 (CC BY-NC 4.0)** — identical to upstream EpiVirQuant. Academic and
-non-commercial use is free; commercial licensing inquiries should be
-directed to Richard Allen White III (`rwhit101@charlotte.edu`).
-
 ## Acknowledgements
 
-Cyclops is developed at the **RAW lab**, College of Computing &
-Informatics, **UNC Charlotte**, with support from the **Charlotte AI
-Institute** and the **CIPHER center**. We thank the maintainers of
-`ndarray`, `rustfft`, `polars`, `plotters`, `linfa`, `egui` and `rfd`
-— the Rust crates that make a project this size feasible for a single
+We thank the maintainers of `ndarray`, `rustfft`, `polars`, `plotters`, `linfa`, `egui` and `rfd` — the Rust crates that make a project this size feasible for a single
 team.
+
+## 📄 License
+
+Creative Commons Attribution-NonCommercial (CC BY-NC 4.0) — See LICENSE file
+Academic and non-commercial use is free; commercial licensing inquiries should be
+directed to [Dr. Richard Allen White III](mailto:rwhit101@uncc.edu)
+
+## 📚 Citing
+
+If you are publishing results obtained using Cyclops, please cite: <br />
+- Pre-Print : <br />
+  White III RA, Figueroa III JL. 2026. Cyclops: a Rust desktop application for sizing and counting viral-like particles, bacteria, archaea, and protists in epifluorescence microscopy bioRxiv. <br />
+
+Consider citing the original work in python, please cite: <br />
+- [EpiVirQuant](https://link.springer.com/article/10.1186/s44330-026-00060-z):  <br />
+  Figueroa JL III, Hollenack SM, Bellanger-Perry M, Fulghum B, Visscher PT, White RA III. 2026. Resolving and quantifying viral-like particles via blind deconvolution. BMC Methods. 3:10.
+
+---
+
+## 📞 Support
+
+- **Issues:** [open an issue](https://github.com/raw-lab/cyclops/issues).  
+- **Email:** [Dr. Richard Allen White III](mailto:rwhit101@uncc.edu)
+---
+
+**Made with ❤️ for the community**
