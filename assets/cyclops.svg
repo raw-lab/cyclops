@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cyclops mascot — a single-eye microscope lens.
+  The motif blends three things from the project:
+    • a microscope objective seen head-on (the outer ring + lens flare)
+    • a cell viewed through that objective (the inner iris + nucleus)
+    • the mythical Cyclops (one eye, central pupil, eyelashes as bead pairs)
+  Pure SVG, no embedded raster — renders crisply at any size and stays
+  small (a few KB) so it can be `include_bytes!`-ed straight into the
+  desktop binary.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Cyclops">
+  <title>Cyclops</title>
+
+  <defs>
+    <!-- Iris gradient: viridis-flavoured teal → deep indigo -->
+    <radialGradient id="iris" cx="50%" cy="48%" r="55%">
+      <stop offset="0%"   stop-color="#5fd0c8"/>
+      <stop offset="35%"  stop-color="#3fb5c4"/>
+      <stop offset="70%"  stop-color="#2c6fa6"/>
+      <stop offset="100%" stop-color="#1a2a5e"/>
+    </radialGradient>
+
+    <!-- Outer barrel: brushed steel feel -->
+    <linearGradient id="barrel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#3a4b66"/>
+      <stop offset="50%"  stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#0e1320"/>
+    </linearGradient>
+
+    <!-- Pupil → centred catchlight -->
+    <radialGradient id="pupil" cx="38%" cy="35%" r="60%">
+      <stop offset="0%"   stop-color="#0b1424"/>
+      <stop offset="60%"  stop-color="#020409"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+
+    <!-- Sclera / lens body -->
+    <radialGradient id="sclera" cx="50%" cy="45%" r="60%">
+      <stop offset="0%"   stop-color="#f7fbff"/>
+      <stop offset="80%"  stop-color="#cfd9e4"/>
+      <stop offset="100%" stop-color="#9aa5b6"/>
+    </radialGradient>
+
+    <!-- Subtle outer glow -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="55%">
+      <stop offset="60%"  stop-color="#5fd0c8" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#5fd0c8" stop-opacity="0.35"/>
+    </radialGradient>
+  </defs>
+
+  <!-- soft halo -->
+  <circle cx="128" cy="128" r="124" fill="url(#glow)"/>
+
+  <!-- outer microscope barrel -->
+  <circle cx="128" cy="128" r="118" fill="url(#barrel)"/>
+  <circle cx="128" cy="128" r="108" fill="none" stroke="#0b1322" stroke-width="2"/>
+
+  <!-- knurled focus ring (tick marks) -->
+  <g stroke="#94a3b8" stroke-width="2" stroke-linecap="round" opacity="0.55">
+    <line x1="128" y1="14"  x2="128" y2="26"/>
+    <line x1="128" y1="230" x2="128" y2="242"/>
+    <line x1="14"  y1="128" x2="26"  y2="128"/>
+    <line x1="230" y1="128" x2="242" y2="128"/>
+    <line x1="48"  y1="48"  x2="56"  y2="56"/>
+    <line x1="208" y1="48"  x2="200" y2="56"/>
+    <line x1="48"  y1="208" x2="56"  y2="200"/>
+    <line x1="208" y1="208" x2="200" y2="200"/>
+  </g>
+
+  <!-- lens body / sclera -->
+  <circle cx="128" cy="128" r="92" fill="url(#sclera)"/>
+  <circle cx="128" cy="128" r="92" fill="none" stroke="#5b6b80" stroke-width="2"/>
+
+  <!-- iris -->
+  <circle cx="128" cy="128" r="64" fill="url(#iris)"/>
+  <!-- iris striation (radial filaments) -->
+  <g stroke="#1a2a5e" stroke-width="1" opacity="0.55">
+    <line x1="128" y1="68"  x2="128" y2="76"/>
+    <line x1="128" y1="180" x2="128" y2="188"/>
+    <line x1="68"  y1="128" x2="76"  y2="128"/>
+    <line x1="180" y1="128" x2="188" y2="128"/>
+    <line x1="84"  y1="84"  x2="90"  y2="90"/>
+    <line x1="172" y1="84"  x2="166" y2="90"/>
+    <line x1="84"  y1="172" x2="90"  y2="166"/>
+    <line x1="172" y1="172" x2="166" y2="166"/>
+  </g>
+
+  <!-- pupil -->
+  <circle cx="128" cy="128" r="30" fill="url(#pupil)"/>
+  <!-- catchlight -->
+  <ellipse cx="118" cy="118" rx="8" ry="5" fill="#ffffff" opacity="0.85"/>
+  <circle  cx="138" cy="138" r="2"  fill="#ffffff" opacity="0.55"/>
+
+  <!-- bead-pair eyelashes (calibration motif) -->
+  <g fill="#5fd0c8">
+    <circle cx="60"  cy="60"  r="4"/>
+    <circle cx="70"  cy="50"  r="3"/>
+    <circle cx="196" cy="60"  r="4"/>
+    <circle cx="186" cy="50"  r="3"/>
+    <circle cx="60"  cy="196" r="4"/>
+    <circle cx="70"  cy="206" r="3"/>
+    <circle cx="196" cy="196" r="4"/>
+    <circle cx="186" cy="206" r="3"/>
+  </g>
+</svg>
