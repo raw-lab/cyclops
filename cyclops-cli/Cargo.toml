@@ -1,0 +1,25 @@
+[package]
+name         = "cyclops-cli"
+version      = { workspace = true }
+edition      = { workspace = true }
+rust-version = { workspace = true }
+license      = { workspace = true }
+authors      = { workspace = true }
+repository   = { workspace = true }
+homepage     = { workspace = true }
+description  = "Cyclops command-line interface (formerly EpiVirQuant)."
+
+[[bin]]
+name = "cyclops"
+path = "src/main.rs"
+
+[dependencies]
+cyclops-core      = { path = "../cyclops-core" }
+
+clap              = { workspace = true }
+anyhow            = { workspace = true }
+tracing           = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json        = { workspace = true }
+indicatif         = { workspace = true }
+chrono            = { workspace = true }
