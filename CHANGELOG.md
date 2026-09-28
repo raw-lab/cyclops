@@ -12,6 +12,21 @@ analysis (pair detection → tunable-PSF blind deconvolution → Richardson–
 Lucy calibration → quantification) is preserved bit-for-bit on the
 algorithmic axes, with these additions:
 
+### Changed
+
+- **Consolidated into a single crate for crates.io.** Cyclops was a
+  three-member Cargo workspace (`cyclops-core`, `cyclops-cli`,
+  `cyclops-gui`), which `cargo publish` would have forced you to upload as
+  three separate crates in dependency order. It is now **one crate**
+  (package `cyclops`) providing the library (`cyclops_core`) plus two
+  binaries (`cyclops`, `cyclops-gui`) via `[[bin]]` targets. The desktop
+  GUI moved behind a `gui` feature (eframe/egui/rfd are now optional
+  deps), so a default `cargo install cyclops` builds only the library and
+  CLI; `--features gui` adds the desktop app. The `onnx` feature is
+  unchanged. Verified with `cargo publish --dry-run`: packages and
+  compiles as a single 37-file crate. All 22 tests pass, and every
+  feature combination (`default`, `gui`, `onnx`, `gui+onnx`) compiles.
+
 ### Added
 
 - **Cyclops branding** — single-eye microscope-objective mascot bundled

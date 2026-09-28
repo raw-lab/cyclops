@@ -54,9 +54,9 @@ samples. Cyclops preserves that scientific core *bit-for-bit* and adds:
 | crate          | description                                  | status |
 |----------------|----------------------------------------------|--------|
 | `cyclops-core` | algorithms — FFT, PSF sweep, MLE blind decon, calibration, quantification, ML classifier | ✅ builds clean, 10 unit tests + 1 integration test passing |
-| `cyclops-cli`  | command-line driver matching `epivirquant.py` flags | ✅ builds clean on stable Rust 1.85+ |
-| `cyclops-gui`  | desktop application (egui + rfd file dialogs) | ✅ builds clean on stable Rust 1.85+ |
-| ONNX hook      | optional Cellpose / StarDist segmentation     | 🟡 behind `--features onnx` |
+| `cyclops` (bin) | command-line driver matching `epivirquant.py` flags | ✅ default build |
+| `cyclops-gui` (bin) | desktop application (egui + rfd file dialogs) | ✅ behind `--features gui` |
+| ONNX backend | optional pure-Rust `tract` classifier hook | ✅ behind `--features onnx` |
 
 ### Verifying your build
 
@@ -92,22 +92,38 @@ the three per-step log files) is verified to exist and be non-empty.
 
 You need a recent stable Rust toolchain (1.85 or newer):
 
+Cyclops is a **single crate** that provides a library plus two binaries
+(`cyclops`, the CLI, and `cyclops-gui`, the desktop app). The GUI and the
+optional ONNX backend are Cargo **features**, so a plain install stays
+lightweight.
+
 ```bash
 # install rustup if you don't have it
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
+# --- straight from crates.io ---
+# CLI only (library + `cyclops` binary; no heavy GUI deps):
+cargo install cyclops --locked
+# CLI + desktop GUI:
+cargo install cyclops --locked --features gui
+# add the optional ONNX classifier backend as well:
+cargo install cyclops --locked --features "gui onnx"
+
+# --- or from a clone ---
 git clone https://github.com/raw-lab/cyclops
 cd cyclops
-
-# command-line binary
-cargo install --path cyclops-cli --locked
-
-# desktop GUI
-cargo install --path cyclops-gui --locked
+cargo install --path . --locked                    # CLI only
+cargo install --path . --locked --features gui     # CLI + GUI
 ```
 
-The binaries land in `~/.cargo/bin/` (`cyclops` and `cyclops-gui`); add it to
-your `$PATH` if it isn't already.
+The binaries land in `~/.cargo/bin/` (`cyclops`, and `cyclops-gui` when
+built with `--features gui`); add it to your `$PATH` if it isn't already.
+
+| feature | adds | default? |
+|---|---|---|
+| *(none)* | library + `cyclops` CLI | ✅ on |
+| `gui` | `cyclops-gui` desktop app (eframe/egui/rfd) | off |
+| `onnx` | pure-Rust ONNX classifier backend (tract) | off |
 
 ### System dependencies
 
@@ -123,8 +139,8 @@ window creation, font discovery, and the native file picker:
 | openSUSE | `sudo zypper install pkg-config gtk3-devel libxkbcommon-devel libxcb-devel fontconfig` |
 
 The CLI (`cyclops`) has **no system-library requirements** — only Rust.
-Build it alone with `cargo install --path cyclops-cli --locked` if you
-don't want the GUI dependencies.
+The GUI system packages above are needed **only** when you build with
+`--features gui`; a default `cargo install cyclops` skips them entirely.
 
 ### Running on WSL (Windows Subsystem for Linux)
 
@@ -187,6 +203,7 @@ cyclops \
 For the desktop experience:
 
 ```bash
+# built with --features gui
 cyclops-gui
 ```
 

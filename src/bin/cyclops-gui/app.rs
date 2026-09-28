@@ -43,7 +43,7 @@ use cyclops_core::{FORMERLY, NAME, VERSION};
 //  Bundled assets
 // ---------------------------------------------------------------------------
 
-const CYCLOPS_LOGO_SVG: &[u8] = include_bytes!("../../assets/cyclops.svg");
+const CYCLOPS_LOGO_SVG: &[u8] = include_bytes!("../../../assets/cyclops.svg");
 
 // ---------------------------------------------------------------------------
 //  Worker messages

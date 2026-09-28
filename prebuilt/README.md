@@ -37,3 +37,18 @@ cargo build --release -p cyclops-gui
 ```
 
 On WSL, launch it via `./scripts/cyclops-gui-wsl.sh` (see docs/WSL.md).
+
+## Note on this binary's provenance
+
+This prebuilt `cyclops` binary was compiled from the same source logic now
+organized as a single crate. The v0.1.0 single-crate reorganization only
+*moved files* (workspace members → one crate with `[[bin]]` targets and a
+`gui` feature); it did not change any CLI behavior, algorithm, or output.
+The definitive way to get a binary matching your checkout is simply:
+
+```bash
+cargo build --release              # library + `cyclops` CLI
+cargo build --release --features gui   # also builds `cyclops-gui`
+```
+
+On a normal multi-core machine this takes a couple of minutes.

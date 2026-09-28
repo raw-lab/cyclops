@@ -1,12 +1,5 @@
-[workspace]
-resolver = "2"
-members = [
-    "cyclops-core",
-    "cyclops-cli",
-    "cyclops-gui",
-]
-
-[workspace.package]
+[package]
+name          = "cyclops"
 version       = "0.1.0"
 edition       = "2021"
 rust-version  = "1.85"
@@ -19,10 +12,58 @@ authors       = [
 repository    = "https://github.com/raw-lab/cyclops"
 homepage      = "https://github.com/raw-lab/cyclops"
 description   = "Cyclops — formerly EpiVirQuant. Sizes and counts viral-like particles, bacteria, archaea, and protists in epifluorescence microscopy via tunable blind deconvolution."
-keywords      = ["bioinformatics", "microscopy", "deconvolution", "virology", "microbial-ecology"]
+readme        = "README.md"
+keywords      = ["bioinformatics", "microscopy", "deconvolution", "virology", "microbiome"]
 categories    = ["science", "command-line-utilities", "visualization"]
 
-[workspace.dependencies]
+# Only ship what the published crate needs. Keeps the uploaded tarball
+# small and reproducible (no target/, no dev scratch, no results/).
+include = [
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "assets/**",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "docs/**/*.md",
+]
+
+# ---------------------------------------------------------------------------
+#  ONE library + TWO binaries, all in this single crate/package.
+#  crates.io publishes this as exactly one crate.
+# ---------------------------------------------------------------------------
+[lib]
+# Library name kept as `cyclops_core` so `use cyclops_core::…` in the
+# binaries and tests continues to resolve unchanged.
+name = "cyclops_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cyclops"
+path = "src/bin/cyclops.rs"
+
+[[bin]]
+name = "cyclops-gui"
+path = "src/bin/cyclops-gui/main.rs"
+# The GUI only builds when the `gui` feature is enabled, so a default
+# `cargo install cyclops` (library + CLI) stays lightweight and doesn't
+# pull the eframe/egui/rfd graphics stack.
+required-features = ["gui"]
+
+# ---------------------------------------------------------------------------
+#  Features
+# ---------------------------------------------------------------------------
+[features]
+default = []
+# Desktop GUI (eframe/egui/rfd). Enable with: cargo install cyclops --features gui
+gui  = ["dep:eframe", "dep:egui", "dep:egui_extras", "dep:rfd"]
+# Optional ONNX classifier backend (pure-Rust tract; no C++ runtime).
+onnx = ["dep:tract-onnx"]
+
+# ---------------------------------------------------------------------------
+#  Dependencies
+# ---------------------------------------------------------------------------
+[dependencies]
 # numerics
 ndarray            = { version = "0.15", features = ["serde", "rayon"] }
 num-complex        = "0.4"
@@ -41,7 +82,7 @@ plotters           = { version = "0.3", default-features = false, features = ["b
 # CLI
 clap               = { version = "4.5", features = ["derive", "env", "wrap_help"] }
 
-# serde
+# serde / config
 serde              = { version = "1", features = ["derive"] }
 serde_json         = "1"
 toml               = "0.8"
@@ -51,12 +92,6 @@ thiserror          = "1.0"
 anyhow             = "1.0"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-
-# GUI
-eframe             = { version = "0.27", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
-egui               = "0.27"
-egui_extras        = { version = "0.27", features = ["image", "svg"] }
-rfd                = "0.14"
 
 # ML (classical, pure-rust)
 linfa              = { version = "0.7", default-features = false }
@@ -68,6 +103,21 @@ chrono             = { version = "0.4", default-features = false, features = ["c
 walkdir            = "2.5"
 once_cell          = "1.19"
 
+# --- optional: GUI (behind `gui` feature) ---
+eframe             = { version = "0.27", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"], optional = true }
+egui               = { version = "0.27", optional = true }
+egui_extras        = { version = "0.27", features = ["image", "svg"], optional = true }
+rfd                = { version = "0.14", optional = true }
+
+# --- optional: ONNX backend (behind `onnx` feature) ---
+tract-onnx         = { version = "0.23", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+# ---------------------------------------------------------------------------
+#  Build profiles
+# ---------------------------------------------------------------------------
 [profile.release]
 opt-level     = 3
 lto           = "thin"
