@@ -242,6 +242,9 @@ fn main() -> ExitCode {
     let cfg = match cli.into_config() {
         Ok(c)  => c,
         Err(e) => {
+            // Always print to stderr, independent of the tracing log level,
+            // so the user sees *why* it failed even without -v.
+            eprintln!("\nError: invalid configuration:\n{e:#}\n");
             error!("invalid configuration: {e:#}");
             return ExitCode::from(2);
         }
@@ -265,6 +268,8 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
+            // Always surface the failure on stderr, not just via tracing.
+            eprintln!("\nError: pipeline failed:\n{e:#}\n");
             error!("pipeline failed: {e:#}");
             ExitCode::FAILURE
         }

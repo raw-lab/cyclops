@@ -33,6 +33,8 @@ pub mod calibration;
 pub mod quantify;
 pub mod classify;
 pub mod plots;
+pub mod progress;
+pub mod onnx;
 pub mod pipeline;
 
 pub use config::{Config, OrganismDomain, PsfMethod, SizeMetric};

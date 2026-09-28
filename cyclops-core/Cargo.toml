@@ -32,10 +32,15 @@ chrono             = { workspace = true }
 walkdir            = { workspace = true }
 once_cell          = { workspace = true }
 
+# ONNX backend (optional). tract is pure-Rust — no C++ ONNX Runtime to
+# download or bundle — which keeps Cyclops a single self-contained binary.
+# tract-onnx re-exports ndarray via `tract_onnx::prelude::tract_ndarray`.
+tract-onnx         = { version = "0.23", optional = true }
+
 [features]
 default = []
 # Optional ONNX deep-learning back-end (off by default; keeps install dependency-free)
-onnx    = []
+onnx    = ["dep:tract-onnx"]
 
 [dev-dependencies]
 tempfile = "3"

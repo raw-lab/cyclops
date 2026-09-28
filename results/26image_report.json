@@ -1,0 +1,38 @@
+{
+  "name": "Cyclops",
+  "version": "0.1.0",
+  "formerly": "EpiVirQuant v0.1.1 (2026-03-18)",
+  "started_at": "2026-07-03T21:05:58.230313304+00:00",
+  "elapsed_seconds": 211.831776547,
+  "config_summary": {
+    "psf_method": "GammaSinc",
+    "size_metric": "EquivalentDiameter",
+    "px2nm": 34.18803418803419,
+    "n_mle_iter": 2,
+    "n_lr_iter": 2,
+    "sphere_nm": 175.0,
+    "threads": 1
+  },
+  "n_dapi": 26,
+  "n_fitc": 26,
+  "min_distance_nm": 457.9225091577259,
+  "psf_f_size": 19,
+  "psf_tau": 0.0318,
+  "psf_v": 2.5133,
+  "correction": 0.5541279487522986,
+  "n_objects": 2887,
+  "mean_size_nm": 191.25977138898477,
+  "size_bands": {
+    "lt_100": 432,
+    "vlp_100_220": 1440,
+    "small_220_500": 992,
+    "bact_500_1200": 20,
+    "large_1200_3000": 3,
+    "protist_gt_3000": 0
+  },
+  "domain_counts": {
+    "bacteria": 1996,
+    "virus": 891
+  },
+  "output_dir": "/tmp/gsl26_out"
+}

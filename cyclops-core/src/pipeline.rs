@@ -29,7 +29,7 @@ use std::time::Instant;
 
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::calibration::{calibrate, CalibrationReport};
 use crate::classify::{build_dapi_lookup, classify_objects, ClassificationReport};
@@ -75,20 +75,121 @@ pub struct ConfigSummary {
     pub threads:      usize,
 }
 
+/// Normalise a path for safe comparison: make it absolute (relative to the
+/// current working directory if needed) and collapse `.`/`..` lexically.
+/// We deliberately avoid `canonicalize()` because it requires the path to
+/// already exist and resolves symlinks — here we only need a stable textual
+/// form for the containment checks below.
+fn normalize(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+    let mut out = PathBuf::new();
+    for comp in abs.components() {
+        match comp {
+            Component::ParentDir => { out.pop(); }
+            Component::CurDir    => {}
+            other                => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Returns true if `child` is equal to, or nested inside, `ancestor`.
+fn is_inside(child: &Path, ancestor: &Path) -> bool {
+    let c = normalize(child);
+    let a = normalize(ancestor);
+    c == a || c.starts_with(&a)
+}
+
+/// Guard against the catastrophic case where the output directory overlaps
+/// the user's input data. Without this, creating output inside the data
+/// folder (an easy mistake in the GUI) used to be destructive.
+///
+/// We refuse to run if the output directory:
+///   * is the same as, or inside, the DAPI / FITC directory or the folder
+///     containing the calibration image, OR
+///   * contains (is an ancestor of) any of those input locations.
+///
+/// In either direction the two trees overlap and running the pipeline
+/// could read-then-clobber the user's own data, so we stop with a clear
+/// message instead.
+fn guard_output_directory(cfg: &Config) -> Result<()> {
+    let out = &cfg.out_dir;
+
+    let calib_parent = cfg
+        .calibration
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let inputs: [(&str, &Path); 3] = [
+        ("DAPI directory",         &cfg.dapi_dir),
+        ("FITC directory",         &cfg.fitc_dir),
+        ("calibration image folder", calib_parent.as_path()),
+    ];
+
+    for (label, input) in inputs {
+        // Output sits inside (or equals) an input location.
+        if is_inside(out, input) {
+            return Err(CyclopsError::Config(format!(
+                "refusing to run: the output directory ({}) is the same as or \
+                 inside your {} ({}). Choose an output directory OUTSIDE your \
+                 data folders so Cyclops cannot overwrite your images.",
+                normalize(out).display(),
+                label,
+                normalize(input).display(),
+            )));
+        }
+        // An input location sits inside the output directory (so writing/
+        // managing output could engulf the inputs).
+        if is_inside(input, out) {
+            return Err(CyclopsError::Config(format!(
+                "refusing to run: your {} ({}) is inside the output directory \
+                 ({}). Choose an output directory that does NOT contain your \
+                 input data.",
+                label,
+                normalize(input).display(),
+                normalize(out).display(),
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// Run the full Cyclops pipeline.
 pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
+    run_pipeline_with_progress(cfg, &crate::progress::NoProgress)
+}
+
+/// Like [`run_pipeline`] but reports progress through `prog`. Front-ends
+/// that want a progress bar (the GUI, the CLI's indicatif bar) call this;
+/// everything else uses [`run_pipeline`] which passes a no-op reporter.
+pub fn run_pipeline_with_progress(
+    cfg:  &Config,
+    prog: &dyn crate::progress::Progress,
+) -> Result<PipelineReport> {
+    use crate::progress::Stage;
     cfg.validate()?;
     let started = Instant::now();
     let started_at = chrono::Utc::now().to_rfc3339();
 
-    // --- Output directory --------------------------------------------------
-    if cfg.out_dir.exists() {
-        warn!("removing existing output directory {:?}", cfg.out_dir);
-        fs::remove_dir_all(&cfg.out_dir).map_err(|e| CyclopsError::Io {
-            path:   cfg.out_dir.clone(),
-            source: e,
-        })?;
-    }
+    // --- Output directory (with data-safety guards) ------------------------
+    //
+    // SAFETY: earlier versions ran `remove_dir_all(out_dir)` unconditionally,
+    // which could delete a user's input data if they pointed --outDir at (or
+    // inside) their image folder. We now:
+    //   1. refuse to run if the output path overlaps any input path, and
+    //   2. NEVER recursively delete a pre-existing directory — we create the
+    //      output dir if missing and write into it, leaving any unrelated
+    //      files alone.
+    guard_output_directory(cfg)?;
     fs::create_dir_all(&cfg.out_dir).map_err(|e| CyclopsError::Io {
         path:   cfg.out_dir.clone(),
         source: e,
@@ -106,12 +207,24 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
     info!("({FORMERLY})");
 
     // --- Step 0: load images ----------------------------------------------
+    //
+    // MEMORY: we deliberately do NOT load the FITC stack yet. The DAPI stack
+    // is only needed through Step 3 (calibration) and the FITC stack only in
+    // Step 4 (quantification). Holding both simultaneously doubles peak RAM
+    // (each full-res 16-bit stack is ~1 GB as f64 for 26×5 MP images), so we
+    // load DAPI now, free it after Step 3, then load FITC. The calibration
+    // image is small and kept throughout.
+    prog.stage(Stage::Loading, 0);
     let dapi = load_dir(&cfg.dapi_dir)?;
-    let fitc = load_dir(&cfg.fitc_dir)?;
+    let fitc_paths = list_image_files(&cfg.fitc_dir)?;
     let calib_img = load_gray(&cfg.calibration)?;
-    info!("loaded {} DAPI / {} FITC / 1 calibration image", dapi.len(), fitc.len());
+    info!("loaded {} DAPI / {} FITC (deferred) / 1 calibration image",
+          dapi.len(), fitc_paths.len());
+    prog.message(&format!("Loaded {} DAPI / {} FITC images",
+                          dapi.len(), fitc_paths.len()));
 
     // --- Step 1: pairing ---------------------------------------------------
+    prog.stage(Stage::Pairing, 0);
     let step1_dir = cfg.out_dir.join("Step-1_VP");
     fs::create_dir_all(&step1_dir)?;
     let opt_box: OptBox = find_opt_box(&calib_img.data, cfg)?;
@@ -121,6 +234,7 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
     }
 
     // --- Step 2: blind deconvolution ---------------------------------------
+    prog.stage(Stage::PsfSweep, 0);
     let step2_dir = cfg.out_dir.join("Step-2_Decon");
     fs::create_dir_all(&step2_dir)?;
 
@@ -162,7 +276,8 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
     write_decon_log(&step2_dir, &optimal)?;
 
     // --- Step 3: calibration ----------------------------------------------
-    let calib_report: CalibrationReport = calibrate(&dapi, &optimal.psf, cfg)?;
+    prog.stage(Stage::Calibration, dapi.len());
+    let calib_report: CalibrationReport = calibrate(&dapi, &optimal.psf, cfg, prog)?;
     let step3_dir = cfg.out_dir.join("Step-3_Corr");
     fs::create_dir_all(&step3_dir)?;
     if cfg.keep_intermediates {
@@ -176,8 +291,19 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
     write_corr_log(&step3_dir, &calib_report, cfg)?;
 
     // --- Step 4: quantification -------------------------------------------
+    // Free the DAPI stack now that calibration is done, THEN load the FITC
+    // stack — this keeps peak memory to roughly one stack, not two.
+    drop(dapi);
+    let n_dapi_loaded = calib_report.per_image.len();
+    let fitc: Vec<GrayImage> = fitc_paths
+        .iter()
+        .map(|p| load_gray(p))
+        .collect::<Result<Vec<_>>>()?;
+    info!("loaded {} FITC images for quantification", fitc.len());
+
+    prog.stage(Stage::Quantification, fitc.len());
     let quant_report: QuantReport =
-        quantify(&fitc, &optimal.psf, calib_report.correction, cfg)?;
+        quantify(&fitc, &optimal.psf, calib_report.correction, cfg, prog)?;
     let step4_dir = cfg.out_dir.join("Step-4_genMasks");
     fs::create_dir_all(&step4_dir)?;
     if cfg.keep_intermediates {
@@ -192,6 +318,7 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
     write_legacy_tsv(&step4_dir.join("sizeCoords.tsv"), &quant_report)?;
 
     // --- Cyclops: ML classification ---------------------------------------
+    prog.stage(Stage::Classification, 0);
     let all_records: Vec<crate::quantify::ObjectRecord> = quant_report
         .per_image
         .iter()
@@ -200,6 +327,8 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
     let dapi_lookup = build_dapi_lookup(&calib_report.per_image);
     let classification: ClassificationReport =
         classify_objects(&all_records, &dapi_lookup, cfg);
+
+    prog.stage(Stage::Writing, 0);
     write_objects_parquet(&step4_dir.join("cyclops_objects.parquet"), &classification)?;
     write_objects_csv(&step4_dir.join("cyclops_objects.tsv"), &classification)?;
 
@@ -219,7 +348,7 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
             sphere_nm:   cfg.sphere_size_nm,
             threads,
         },
-        n_dapi:          dapi.len(),
+        n_dapi:          n_dapi_loaded,
         n_fitc:          fitc.len(),
         min_distance_nm: opt_box.min_distance_nm,
         psf_f_size:      optimal.f_size,
@@ -238,6 +367,7 @@ pub fn run_pipeline(cfg: &Config) -> Result<PipelineReport> {
         .map_err(|e| CyclopsError::Other(anyhow::anyhow!(e)))?;
 
     info!("Cyclops complete: {:.1}s elapsed", report.elapsed_seconds);
+    prog.stage(Stage::Done, 0);
     Ok(report)
 }
 

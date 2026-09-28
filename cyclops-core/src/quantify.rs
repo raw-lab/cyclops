@@ -69,13 +69,21 @@ pub fn quantify(
     psf:         &Array2<f64>,
     correction:  f64,
     cfg:         &Config,
+    prog:        &dyn crate::progress::Progress,
 ) -> Result<QuantReport> {
     info!("Step 4 — quantifying {} FITC images (CORR = {:.4})", fitc.len(), correction);
     let start = Instant::now();
 
+    let total = fitc.len();
+    let done = std::sync::atomic::AtomicUsize::new(0);
     let per_image: Vec<PerImageQuant> = fitc
         .par_iter()
-        .map(|img| quantify_single(img, psf, correction, cfg))
+        .map(|img| {
+            let r = quantify_single(img, psf, correction, cfg);
+            let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            prog.tick(n, total);
+            r
+        })
         .collect::<Result<Vec<_>>>()?;
 
     // Aggregate.

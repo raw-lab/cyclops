@@ -48,15 +48,25 @@ pub fn calibrate(
     dapi:    &[GrayImage],
     psf:     &Array2<f64>,
     cfg:     &Config,
+    prog:    &dyn crate::progress::Progress,
 ) -> Result<CalibrationReport> {
     info!("Step 3 — Richardson-Lucy + calibration on {} images", dapi.len());
     let start = Instant::now();
 
     // Per-image work parallelised across CPU cores. Rayon thread pool
-    // configured in `pipeline::run_pipeline`.
+    // configured in `pipeline::run_pipeline`. An atomic counter lets each
+    // finished image tick the progress bar from whichever worker thread
+    // completed it (order-independent, contention-free).
+    let total = dapi.len();
+    let done = std::sync::atomic::AtomicUsize::new(0);
     let per_image: Vec<PerImageStats> = dapi
         .par_iter()
-        .map(|img| process_single(img, psf, cfg))
+        .map(|img| {
+            let r = process_single(img, psf, cfg);
+            let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            prog.tick(n, total);
+            r
+        })
         .collect::<Result<Vec<_>>>()?;
 
     // Aggregate.

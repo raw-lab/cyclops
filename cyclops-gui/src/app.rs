@@ -36,7 +36,7 @@ use egui_extras::{Column, TableBuilder};
 use cyclops_core::config::{
     ClassifierConfig, Config, OrganismDomain, PsfMethod, SizeMetric,
 };
-use cyclops_core::pipeline::{run_pipeline, PipelineReport};
+use cyclops_core::pipeline::{run_pipeline_with_progress, PipelineReport};
 use cyclops_core::{FORMERLY, NAME, VERSION};
 
 // ---------------------------------------------------------------------------
@@ -51,6 +51,11 @@ const CYCLOPS_LOGO_SVG: &[u8] = include_bytes!("../../assets/cyclops.svg");
 
 enum WorkerMsg {
     Log(String),
+    /// A new pipeline stage began; carries its label and the number of
+    /// per-item ticks expected (0 if unknown).
+    StageChange { label: String, start_frac: f32, end_frac: f32, total: usize },
+    /// One item within the current stage finished.
+    Tick { done: usize, total: usize },
     Done(Box<PipelineReport>),
     Failed(String),
 }
@@ -150,6 +155,55 @@ impl FormState {
         if self.calibration.trim().is_empty() { return Err("Calibration image is required.".into()); }
         if self.out_dir.trim().is_empty()     { return Err("Output directory is required.".into()); }
 
+        // --- DATA-SAFETY pre-flight check -----------------------------------
+        // Catch the dangerous "output dir overlaps data dir" case here, before
+        // the pipeline runs, with a friendly message. (The pipeline enforces
+        // this again as a hard backstop.)
+        {
+            let norm = |p: &str| -> PathBuf {
+                let pb = PathBuf::from(p.trim());
+                let abs = if pb.is_absolute() {
+                    pb
+                } else {
+                    std::env::current_dir().unwrap_or_default().join(pb)
+                };
+                let mut out = PathBuf::new();
+                for c in abs.components() {
+                    use std::path::Component;
+                    match c {
+                        Component::ParentDir => { out.pop(); }
+                        Component::CurDir    => {}
+                        other                => out.push(other.as_os_str()),
+                    }
+                }
+                out
+            };
+            let out_n  = norm(&self.out_dir);
+            let dapi_n = norm(&self.dapi_dir);
+            let fitc_n = norm(&self.fitc_dir);
+            let cal_parent = PathBuf::from(self.calibration.trim());
+            let cal_n = norm(cal_parent.parent().map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| ".".into()).as_str());
+
+            for (label, inp) in [("DAPI directory", &dapi_n),
+                                 ("FITC directory", &fitc_n),
+                                 ("calibration image's folder", &cal_n)] {
+                let overlap = out_n == *inp
+                    || out_n.starts_with(inp)
+                    || inp.starts_with(&out_n);
+                if overlap {
+                    return Err(format!(
+                        "Output directory overlaps your {label}.\n\n\
+                         Output: {}\n{}: {}\n\n\
+                         Pick an output folder OUTSIDE your data folders so \
+                         Cyclops cannot touch your images (e.g. \
+                         ~/cyclops_runs/run1).",
+                        out_n.display(), label, inp.display(),
+                    ));
+                }
+            }
+        }
+
         let mut domains = Vec::with_capacity(4);
         if self.use_virus    { domains.push(OrganismDomain::Virus); }
         if self.use_bacteria { domains.push(OrganismDomain::Bacteria); }
@@ -234,6 +288,12 @@ pub struct CyclopsApp {
     rx:             Option<Receiver<WorkerMsg>>,
     started_at:     Option<Instant>,
     central_tab:    CentralTab,
+    // --- live progress state ---
+    stage_label:    String,   // current stage's human label
+    stage_start:    f32,      // global fraction at stage start
+    stage_end:      f32,      // global fraction at stage end
+    stage_done:     usize,    // items finished in this stage
+    stage_total:    usize,    // items expected in this stage (0 = indeterminate)
 }
 
 impl CyclopsApp {
@@ -257,6 +317,11 @@ impl CyclopsApp {
             rx:          None,
             started_at:  None,
             central_tab: CentralTab::Status,
+            stage_label: String::new(),
+            stage_start: 0.0,
+            stage_end:   0.0,
+            stage_done:  0,
+            stage_total: 0,
         }
     }
 
@@ -275,6 +340,11 @@ impl CyclopsApp {
         self.last_report = None;
         self.is_running  = true;
         self.started_at  = Some(Instant::now());
+        self.stage_label = "Starting…".into();
+        self.stage_start = 0.0;
+        self.stage_end   = 0.05;
+        self.stage_done  = 0;
+        self.stage_total = 0;
         self.log_lines.push(format!(
             "▶ launching pipeline — output → {}",
             cfg.out_dir.display()
@@ -293,7 +363,28 @@ impl CyclopsApp {
                 "FITC ⇒ {}", cfg.fitc_dir.display()
             )));
 
-            match run_pipeline(&cfg) {
+            // Bridge the core's Progress trait to our mpsc channel. The
+            // parallel stages tick from rayon worker threads, so the
+            // closure must be Sync — wrap the (Send-only) Sender in a Mutex.
+            let tx_prog = std::sync::Mutex::new(tx.clone());
+            let prog = cyclops_core::progress::FnProgress::new(move |ev| {
+                use cyclops_core::progress::ProgressEvent;
+                let msg = match ev {
+                    ProgressEvent::Stage { stage, total } => WorkerMsg::StageChange {
+                        label:      stage.label().to_string(),
+                        start_frac: stage.start_fraction(),
+                        end_frac:   stage.end_fraction(),
+                        total,
+                    },
+                    ProgressEvent::Tick { done, total } => WorkerMsg::Tick { done, total },
+                    ProgressEvent::Message(m) => WorkerMsg::Log(m),
+                };
+                if let Ok(s) = tx_prog.lock() {
+                    let _ = s.send(msg);
+                }
+            });
+
+            match run_pipeline_with_progress(&cfg, &prog) {
                 Ok(report) => {
                     let _ = tx.send(WorkerMsg::Done(Box::new(report)));
                 }
@@ -314,6 +405,18 @@ impl CyclopsApp {
                 WorkerMsg::Log(line) => {
                     self.log_lines.push(line);
                 }
+                WorkerMsg::StageChange { label, start_frac, end_frac, total } => {
+                    self.log_lines.push(format!("▸ {label}"));
+                    self.stage_label = label;
+                    self.stage_start = start_frac;
+                    self.stage_end   = end_frac;
+                    self.stage_total = total;
+                    self.stage_done  = 0;
+                }
+                WorkerMsg::Tick { done, total } => {
+                    self.stage_done  = done;
+                    self.stage_total = total;
+                }
                 WorkerMsg::Done(report) => {
                     let elapsed = report.elapsed_seconds;
                     self.log_lines.push(format!(
@@ -323,6 +426,11 @@ impl CyclopsApp {
                     self.last_report = Some(*report);
                     self.is_running  = false;
                     self.central_tab = CentralTab::Objects;
+                    self.stage_label = "Done".into();
+                    self.stage_start = 1.0;
+                    self.stage_end   = 1.0;
+                    self.stage_done  = 0;
+                    self.stage_total = 0;
                     keep_rx = false;
                 }
                 WorkerMsg::Failed(err) => {
@@ -529,15 +637,53 @@ impl CyclopsApp {
         });
 
         if self.is_running {
-            ui.add_space(4.0);
-            ui.add(egui::Spinner::new());
-            if let Some(t) = self.started_at {
-                ui.label(
-                    RichText::new(format!("running… {:.1}s", t.elapsed().as_secs_f64()))
+            ui.add_space(6.0);
+
+            // Compute the global fraction: anchor at the current stage's
+            // start, then interpolate across the stage span by the per-item
+            // done/total ratio. Stages with no item count (total == 0) sit
+            // at their start anchor and show an animated bar instead.
+            let within = if self.stage_total > 0 {
+                (self.stage_done as f32 / self.stage_total as f32).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let frac = (self.stage_start
+                + (self.stage_end - self.stage_start) * within)
+                .clamp(0.0, 1.0);
+
+            // Bar text: stage label + per-item counter when known.
+            let bar_text = if self.stage_total > 0 {
+                format!("{}  ·  {}/{}", self.stage_label, self.stage_done, self.stage_total)
+            } else {
+                self.stage_label.clone()
+            };
+
+            let mut bar = egui::ProgressBar::new(frac)
+                .desired_width(ui.available_width())
+                .text(bar_text);
+            // Indeterminate stages (no item count) get the animated stripe
+            // so the user sees the app is alive during long single-shot work
+            // like the PSF sweep.
+            if self.stage_total == 0 {
+                bar = bar.animate(true);
+            }
+            ui.add(bar);
+
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(14.0));
+                if let Some(t) = self.started_at {
+                    ui.label(
+                        RichText::new(format!(
+                            "{:.0}% overall  ·  {:.1}s elapsed",
+                            frac * 100.0,
+                            t.elapsed().as_secs_f64()
+                        ))
                         .small()
                         .italics(),
-                );
-            }
+                    );
+                }
+            });
         }
 
         if let Some(err) = &self.last_error {

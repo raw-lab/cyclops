@@ -1,0 +1,20 @@
+Cyclops results summary
+=======================
+
+objects           : 2887
+mean size (nm)    : 191.26
+median size (nm)  : 194.75
+size std (nm)     : 105.14
+size range (nm)   : [37.0, 2850.7]
+
+domain counts:
+  bacteria  :  1996  (69.1%)
+  virus     :   891  (30.9%)
+correction        : 0.5541279487522986
+min_distance_nm   : 457.9225091577259
+psf_f_size        : 19
+psf_tau           : 0.0318
+psf_v             : 2.5133
+n_dapi            : 26
+n_fitc            : 26
+elapsed_seconds   : 211.831776547

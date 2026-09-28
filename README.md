@@ -6,7 +6,11 @@
 
 <p align="center">
   <em>One eye on the field of view, one count per particle.</em><br/>
-  </p>
+  <strong>Cyclops</strong> sizes and counts viral-like particles, bacteria, archaea, and protists
+  in epifluorescence microscopy — a complete <strong>Rust</strong> rewrite of
+  <a href="https://github.com/raw-lab/EpiVirQuant">EpiVirQuant</a> with a desktop GUI,
+  Polars-backed object tables, and an optional ML classifier.
+</p>
 
 <p align="center">
   <a href="#install"><img alt="install" src="https://img.shields.io/badge/install-cargo-blue"/></a>
@@ -18,13 +22,9 @@
 
 ## Why Cyclops?
 
-<strong>Cyclops</strong> sizes and counts viral-like particles, bacteria, archaea, and protists
-  in epifluorescence microscopy — a complete <strong>Rust</strong> rewrite of
-  <a href="https://github.com/raw-lab/EpiVirQuant">EpiVirQuant</a> with a desktop GUI,
-  Polars-backed object tables, and an optional ML classifier.
-  Cyclops is a fully reimplemented, statically-compiled successor to
-[EpiVirQuant](https://github.com/raw-lab/EpiVirQuant).
-The original Python pipeline pairs scale-bar beads, performs blind-deconvolution maximum-
+Cyclops is a fully reimplemented, statically-compiled successor to
+**EpiVirQuant v0.1.1** (Figueroa III, Hollenack & White III, 2026). The original
+Python pipeline pairs scale-bar beads, performs blind-deconvolution maximum-
 likelihood estimation of a **tunable point-spread function** (γ-sinc, Gaussian,
 or hybrid), calibrates against DAPI microspheres, then quantifies FITC-stained
 samples. Cyclops preserves that scientific core *bit-for-bit* and adds:
@@ -126,6 +126,32 @@ The CLI (`cyclops`) has **no system-library requirements** — only Rust.
 Build it alone with `cargo install --path cyclops-cli --locked` if you
 don't want the GUI dependencies.
 
+### Running on WSL (Windows Subsystem for Linux)
+
+The GUI works on WSL2 with WSLg, but the virtual GPU usually can't run
+hardware OpenGL, so you launch it through the bundled software-rendering
+wrapper:
+
+```bash
+./scripts/cyclops-gui-wsl.sh
+```
+
+See [`docs/WSL.md`](docs/WSL.md) for the full WSL setup and a
+troubleshooting table keyed to the exact error messages.
+
+### Desktop launcher / application-menu icon
+
+To add Cyclops to your application menu (and the Windows Start Menu on
+WSLg) with the Cyclops icon:
+
+```bash
+./scripts/install-desktop.sh
+```
+
+This auto-detects WSL and wires the menu entry to the software-rendering
+launcher when appropriate. Remove it later with
+`rm ~/.local/share/applications/cyclops.desktop`.
+
 Note: `fontconfig` itself can be installed as the runtime library
 (`libfontconfig1` / `fontconfig`) rather than the dev package
 (`libfontconfig1-dev` / `fontconfig-devel`) — Cyclops uses plotters'
@@ -136,7 +162,9 @@ bundled bitmap font.
 
 ### Bioconda
 
-A Bioconda recipe will follow soon
+A Bioconda recipe will follow the first tagged release alongside the existing
+[raw-lab](https://anaconda.org/bioconda/repo) channel tooling (MetaCerberus,
+MerCat2, NFixDB, DeGenPrime, Pathview-web).
 
 ## Quick start
 
@@ -164,6 +192,15 @@ cyclops-gui
 
 …then point the **DAPI / FITC / Calibration / Output** fields at your data
 and click **▶ Run Cyclops**.
+
+> **Important — keep your output directory separate from your data.**
+> Always set `--outDir` (or the GUI's Output field) to a folder that is
+> **not** inside your DAPI/FITC image folders — for example
+> `~/cyclops_runs/run1`. Cyclops writes its `Step-1` … `Step-4`
+> results and object tables there. As a safety measure Cyclops now
+> **refuses to run** (with a clear message) if the output path overlaps
+> any of your input folders, so it can never touch your source images —
+> but choosing a clean, separate output folder keeps everything tidy.
 
 ## How it works
 
@@ -301,33 +338,33 @@ cargo build --release
 cargo build --release -p cyclops-cli --features onnx
 ```
 
+## Citation
+
+If you use Cyclops in published work, please cite both the original
+EpiVirQuant article and this software:
+
+> **EpiVirQuant** — Figueroa III JL, Hollenack SM, White III RAW.
+> *Direct counting and sizing of viral-like particles by tunable
+> blind-deconvolution of epifluorescence microscopy.*
+> **BMC Methods 3:10**, 2026. <https://doi.org/10.1186/s44330-026-00060-z>
+
+> **Cyclops** — White III RAW, Figueroa III JL, Hollenack SM. *Cyclops:
+> a Rust desktop application for sizing and counting viral-like
+> particles, bacteria, archaea, and protists in epifluorescence
+> microscopy.* (in preparation, 2026).
+
+## License
+
+Cyclops is released under **Creative Commons Attribution-NonCommercial
+4.0 (CC BY-NC 4.0)** — identical to upstream EpiVirQuant. Academic and
+non-commercial use is free; commercial licensing inquiries should be
+directed to Richard Allen White III (`rwhit101@charlotte.edu`).
+
 ## Acknowledgements
 
-We thank the maintainers of `ndarray`, `rustfft`, `polars`, `plotters`, `linfa`, `egui` and `rfd` — the Rust crates that make a project this size feasible for a single
+Cyclops is developed at the **RAW lab**, College of Computing &
+Informatics, **UNC Charlotte**, with support from the **Charlotte AI
+Institute** and the **CIPHER center**. We thank the maintainers of
+`ndarray`, `rustfft`, `polars`, `plotters`, `linfa`, `egui` and `rfd`
+— the Rust crates that make a project this size feasible for a single
 team.
-
-## 📄 License
-
-Creative Commons Attribution-NonCommercial (CC BY-NC 4.0) — See LICENSE file
-Academic and non-commercial use is free; commercial licensing inquiries should be
-directed to [Dr. Richard Allen White III](mailto:rwhit101@uncc.edu)
-
-## 📚 Citing
-
-If you are publishing results obtained using Cyclops, please cite: <br />
-- Pre-Print : <br />
-  White III RA, Figueroa III JL. 2026. Cyclops: a Rust desktop application for sizing and counting viral-like particles, bacteria, archaea, and protists in epifluorescence microscopy bioRxiv. <br />
-
-Consider citing the original work in python, please cite: <br />
-- [EpiVirQuant](https://link.springer.com/article/10.1186/s44330-026-00060-z):  <br />
-  Figueroa JL III, Hollenack SM, Bellanger-Perry M, Fulghum B, Visscher PT, White RA III. 2026. Resolving and quantifying viral-like particles via blind deconvolution. BMC Methods. 3:10.
-
----
-
-## 📞 Support
-
-- **Issues:** [open an issue](https://github.com/raw-lab/cyclops/issues).  
-- **Email:** [Dr. Richard Allen White III](mailto:rwhit101@uncc.edu)
----
-
-**Made with ❤️ for the community**

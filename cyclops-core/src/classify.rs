@@ -92,6 +92,27 @@ pub fn classify_objects(
         }
     }
 
+    // Optional ONNX refinement: if the user supplied a model, score every
+    // object with it and override the prior where it returns a result. The
+    // backend is a no-op stub unless the crate was built with the `onnx`
+    // feature, so this call is always safe.
+    let mut onnx_used = false;
+    if let Some(model_path) = &cfg.classifier.onnx_model {
+        let ratios: Vec<f64> = records
+            .iter()
+            .map(|r| dapi_fitc_ratio(r, dapi_lookup))
+            .collect();
+        if let Some(refined) =
+            crate::onnx::classify_with_onnx(model_path, records, &ratios, domains)
+        {
+            if refined.len() == prior.len() {
+                prior = refined;
+                onnx_used = true;
+            }
+        }
+    }
+    let _ = onnx_used; // reserved for future report field
+
     let mut classified = Vec::with_capacity(records.len());
     let mut counts: HashMap<String, u64> = HashMap::new();
     for (r, (dom, conf)) in records.iter().zip(prior.iter()) {
@@ -156,9 +177,21 @@ fn rule_based(
         };
 
         let score = membership * shape_boost * ratio_boost;
-        if score > best.1 {
+        // NaN-safe comparison: a non-finite score (which could only arise
+        // from a NaN size_nm / eccentricity upstream) must never silently
+        // win or be treated as "greater". `score > best.1` is already
+        // false for NaN, but we make the intent explicit and skip
+        // non-finite scores so a valid object is never misclassified by a
+        // stray NaN. (Addresses the "NaN float comparisons drop valid
+        // objects" class of bug.)
+        if score.is_finite() && score > best.1 {
             best = (dom, score);
         }
+    }
+    // If every candidate scored non-finite or zero, fall back to the
+    // size-nearest domain so the object is still classified, never dropped.
+    if !best.1.is_finite() || best.1 <= 0.0 {
+        best = (nearest_by_size(r.size_nm, candidates), 0.0);
     }
     // Squash to [0, 1] confidence with a soft cap.
     let conf = (best.1 / (best.1 + 1.0)).clamp(0.0, 1.0);
@@ -181,6 +214,30 @@ fn dapi_fitc_ratio(r: &ObjectRecord, lookup: &HashMap<String, f64>) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Fallback classifier used only when every candidate's score was
+/// non-finite or zero: pick the domain whose canonical size band centre
+/// is closest to the object's size. Guarantees an object is never dropped
+/// or left unclassified even in the presence of a NaN feature. Distance
+/// uses `total_cmp` so a NaN size sorts deterministically to the end
+/// rather than corrupting the comparison.
+fn nearest_by_size(size: f64, candidates: &[OrganismDomain]) -> OrganismDomain {
+    candidates
+        .iter()
+        .copied()
+        .min_by(|a, b| {
+            let da = {
+                let (lo, hi) = a.nm_range();
+                (size - 0.5 * (lo + hi)).abs()
+            };
+            let db = {
+                let (lo, hi) = b.nm_range();
+                (size - 0.5 * (lo + hi)).abs()
+            };
+            da.total_cmp(&db)
+        })
+        .unwrap_or(candidates[0])
 }
 
 #[inline]
@@ -272,4 +329,67 @@ pub fn build_dapi_lookup(
         map.insert(s.name.clone(), mean);
     }
     map
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ClassifierConfig, Config, OrganismDomain};
+    use crate::quantify::ObjectRecord;
+    use std::collections::HashMap;
+
+    fn rec(size: f64, ecc: f64, intensity: f64) -> ObjectRecord {
+        ObjectRecord {
+            file_name:     "S_(fitc)".into(),
+            object_id:     1,
+            size_nm:       size,
+            axis_major_nm: size,
+            axis_minor_nm: size,
+            x_px:          0.0,
+            y_px:          0.0,
+            intensity,
+            eccentricity:  ecc,
+            area_px:       10,
+        }
+    }
+
+    fn cfg_with(domains: Vec<OrganismDomain>) -> Config {
+        Config {
+            classifier: ClassifierConfig { domains, gmm_refine: false, onnx_model: None },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn nan_features_do_not_drop_objects() {
+        // Objects with NaN size / eccentricity must still be classified,
+        // never silently dropped (Bug 9 regression guard).
+        let records = vec![
+            rec(f64::NAN, 0.5, 1.0),
+            rec(150.0, f64::NAN, 1.0),
+            rec(f64::NAN, f64::NAN, 0.0),
+            rec(150.0, 0.5, 1.0), // one normal object
+        ];
+        let lookup: HashMap<String, f64> = HashMap::new();
+        let report = classify_objects(&records, &lookup, &cfg_with(vec![]));
+        assert_eq!(report.objects.len(), records.len(),
+            "every object must survive classification, even with NaN features");
+        // Confidences must all be finite.
+        for o in &report.objects {
+            assert!(o.confidence.is_finite(), "confidence must be finite, got {}", o.confidence);
+        }
+    }
+
+    #[test]
+    fn every_object_gets_a_domain() {
+        let records: Vec<ObjectRecord> =
+            (0..20).map(|i| rec(50.0 + i as f64 * 100.0, 0.4, 1.0)).collect();
+        let lookup: HashMap<String, f64> = HashMap::new();
+        let report = classify_objects(&records, &lookup, &cfg_with(vec![
+            OrganismDomain::Virus, OrganismDomain::Bacteria,
+        ]));
+        // domain_counts must sum to the number of objects — nothing lost.
+        let total: u64 = report.domain_counts.values().sum();
+        assert_eq!(total as usize, records.len());
+    }
 }

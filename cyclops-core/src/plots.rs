@@ -28,6 +28,22 @@ pub const DEEP: [RGBColor; 10] = [
     RGBColor(100, 181, 205),
 ];
 
+/// Ensure the parent directory of an output path exists before we try to
+/// create a file there. Defensive: the pipeline already creates each Step
+/// directory, but a plot function called standalone (tests, library users)
+/// must not fail just because the folder isn't there yet.
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| CyclopsError::Io {
+                path:   parent.to_path_buf(),
+                source: e,
+            })?;
+        }
+    }
+    Ok(())
+}
+
 fn map_err(err: impl std::fmt::Display) -> CyclopsError {
     CyclopsError::Plot(err.to_string())
 }
@@ -70,6 +86,7 @@ pub fn histogram<P: AsRef<Path>>(
     }
     let y_max = (*bins.iter().max().unwrap_or(&1) as f64) * 1.1;
 
+    ensure_parent_dir(path.as_ref())?;
     let root = BitMapBackend::new(path.as_ref(), (900, 540)).into_drawing_area();
     root.fill(&WHITE).map_err(map_err)?;
     let mut chart = ChartBuilder::on(&root)
@@ -144,6 +161,7 @@ pub fn scatter<P: AsRef<Path>>(
     let pad_x = (x_max - x_min) * 0.05;
     let pad_y = (y_max - y_min) * 0.05;
 
+    ensure_parent_dir(path.as_ref())?;
     let root = BitMapBackend::new(path.as_ref(), (900, 600)).into_drawing_area();
     root.fill(&WHITE).map_err(map_err)?;
     let mut chart = ChartBuilder::on(&root)
@@ -192,6 +210,7 @@ pub fn heatmap<P: AsRef<Path>>(
         }
     }
     if (max - min).abs() < 1e-12 { max = min + 1.0; }
+    ensure_parent_dir(path.as_ref())?;
     let root = BitMapBackend::new(path.as_ref(), (700, 700)).into_drawing_area();
     root.fill(&WHITE).map_err(map_err)?;
     let mut chart = ChartBuilder::on(&root)
